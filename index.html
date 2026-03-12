@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Let Me Glean That For You</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    background: #fff;
+    color: #484848;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 640px;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .wordmark {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #343CED;
+    margin-bottom: 2rem;
+    letter-spacing: -0.02em;
+  }
+
+  .search-wrapper {
+    position: relative;
+    margin-bottom: 1.5rem;
+  }
+
+  .search-bar {
+    width: 100%;
+    padding: 1rem 1.25rem;
+    font-size: 1.1rem;
+    font-family: inherit;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    outline: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    color: #484848;
+    background: #fff;
+  }
+
+  .search-bar:focus {
+    border-color: #343CED;
+    box-shadow: 0 2px 12px rgba(52,60,237,0.15);
+  }
+
+  .search-bar::placeholder { color: #aaa; }
+
+  .btn {
+    display: inline-block;
+    padding: 0.85rem 2rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-family: inherit;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  }
+
+  .btn:active { transform: scale(0.96); }
+
+  .btn-generate {
+    background: #D8FD49;
+    color: #1a1a1a;
+    box-shadow: 0 2px 8px rgba(216,253,73,0.4);
+  }
+
+  .btn-generate:hover { box-shadow: 0 4px 16px rgba(216,253,73,0.5); }
+
+  .btn-search {
+    background: #343CED;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(52,60,237,0.3);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .btn-search.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .btn-search.pulse {
+    animation: pulse 0.6s ease-in-out;
+  }
+
+  .btn-search.pressed {
+    transform: scale(0.93);
+    box-shadow: 0 1px 4px rgba(52,60,237,0.2);
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 2px 8px rgba(52,60,237,0.3); }
+    50% { box-shadow: 0 4px 20px rgba(52,60,237,0.6); }
+  }
+
+  .snarky {
+    margin-top: 1.5rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #343CED;
+    opacity: 0;
+    transition: opacity 0.6s ease-in;
+  }
+
+  .snarky.visible { opacity: 1; }
+
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1a1a1a;
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
+    color: #999;
+    margin-bottom: 2rem;
+  }
+
+  /* Typing cursor for animation mode */
+  .search-bar.typing {
+    caret-color: transparent;
+  }
+
+  .search-wrapper .cursor {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 1.3rem;
+    background: #484848;
+    animation: blink 0.7s step-end infinite;
+    pointer-events: none;
+    display: none;
+  }
+
+  .cursor.visible { display: block; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="wordmark">Glean</div>
+
+  <!-- Home view -->
+  <div id="home-view" style="display:none;">
+    <p class="subtitle">Let Me Glean That For You</p>
+    <div class="search-wrapper">
+      <input id="home-input" class="search-bar" type="text" placeholder="Search for anything..." autocomplete="off">
+    </div>
+    <button id="generate-btn" class="btn btn-generate">Generate Link</button>
+  </div>
+
+  <!-- Animation view -->
+  <div id="anim-view" style="display:none;">
+    <div class="search-wrapper">
+      <input id="anim-input" class="search-bar typing" type="text" readonly placeholder="Search for anything...">
+      <div id="cursor" class="cursor"></div>
+    </div>
+    <button id="search-btn" class="btn btn-search">Search Glean</button>
+    <div id="snarky" class="snarky">Was that so hard?</div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Link copied to clipboard!</div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const query = params.get('q');
+
+  if (query) {
+    startAnimation(query);
+  } else {
+    showHome();
+  }
+
+  function showHome() {
+    document.getElementById('home-view').style.display = '';
+    const input = document.getElementById('home-input');
+    const btn = document.getElementById('generate-btn');
+
+    function generate() {
+      const q = input.value.trim();
+      if (!q) { input.focus(); return; }
+      const url = window.location.origin + window.location.pathname + '?q=' + encodeURIComponent(q);
+      navigator.clipboard.writeText(url).then(function() {
+        showToast('Link copied to clipboard!');
+      }).catch(function() {
+        // Fallback
+        prompt('Copy this link:', url);
+      });
+    }
+
+    btn.addEventListener('click', generate);
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') generate();
+    });
+  }
+
+  function startAnimation(query) {
+    document.getElementById('anim-view').style.display = '';
+    const input = document.getElementById('anim-input');
+    const cursor = document.getElementById('cursor');
+    const searchBtn = document.getElementById('search-btn');
+    const snarky = document.getElementById('snarky');
+
+    // Position cursor at start
+    updateCursorPos(input, cursor, 0);
+
+    // Step 1: Show cursor after 0.5s
+    setTimeout(function() {
+      cursor.classList.add('visible');
+
+      // Step 2: Type out query
+      let i = 0;
+      const interval = setInterval(function() {
+        if (i < query.length) {
+          input.value += query[i];
+          i++;
+          updateCursorPos(input, cursor, i);
+        } else {
+          clearInterval(interval);
+          cursor.classList.remove('visible');
+
+          // Step 3: Activate & pulse button
+          setTimeout(function() {
+            searchBtn.classList.add('active', 'pulse');
+
+            // Step 4: "Click" button
+            setTimeout(function() {
+              searchBtn.classList.remove('pulse');
+              searchBtn.classList.add('pressed');
+
+              // Step 5: Show snarky message
+              setTimeout(function() {
+                searchBtn.classList.remove('pressed');
+                snarky.classList.add('visible');
+
+                // Step 6: Redirect
+                setTimeout(function() {
+                  window.location.href = 'https://app.getglean.com/search?q=' + encodeURIComponent(query);
+                }, 2000);
+              }, 500);
+            }, 500);
+          }, 500);
+        }
+      }, 80);
+    }, 500);
+  }
+
+  function updateCursorPos(input, cursor, charCount) {
+    // Approximate cursor position based on character count
+    var style = getComputedStyle(input);
+    var paddingLeft = parseFloat(style.paddingLeft);
+    // Measure text width with a hidden span
+    var span = document.createElement('span');
+    span.style.font = style.font;
+    span.style.fontSize = style.fontSize;
+    span.style.visibility = 'hidden';
+    span.style.position = 'absolute';
+    span.style.whiteSpace = 'pre';
+    span.textContent = input.value || '';
+    document.body.appendChild(span);
+    var textWidth = span.offsetWidth;
+    document.body.removeChild(span);
+    cursor.style.left = (paddingLeft + textWidth) + 'px';
+  }
+
+  function showToast(msg) {
+    var toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  }
+})();
+</script>
+</body>
+</html>
